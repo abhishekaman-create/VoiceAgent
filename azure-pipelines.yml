@@ -1,4 +1,8 @@
-trigger: none
+trigger:
+  branches:
+   include:
+     - demo
+     - development
 
 pool:
   vmImage: ubuntu-latest
@@ -19,21 +23,14 @@ stages:
     - checkout: self
       clean: true
 
-    # 2 Inject env from Variable Group
-    - script: |
-        echo "LIVEKIT_API_KEY=$(LIVEKIT_API_KEY)" >> .env
-        echo "LIVEKIT_API_SECRET=$(LIVEKIT_API_SECRET)" >> .env
-        echo "LIVEKIT_URL=$(LIVEKIT_URL)" >> .env
-      displayName: Create .env from Variable Group
-
-    # 3 Validate required files (fail fast)
+    # 2 Validate required files (fail fast)
     - script: |
         test -f agent.py
         test -f requirements.txt
         test -f livekit.toml
       displayName: Validate project structure
 
-    # 4 Publish artifact for CD
+    # 3 Publish artifact for CD
     - task: PublishPipelineArtifact@1
       inputs:
         targetPath: $(Build.SourcesDirectory)
@@ -48,10 +45,13 @@ stages:
   jobs:
 
   # -------- DEV --------
-  - deployment: DeployMain
-    displayName: Deploy to Main
+  - deployment: DeployDev
+    displayName: Deploy to dev
     environment: dev
-    condition: eq(variables['Build.SourceBranchName'], 'main')
+    condition: eq(variables['Build.SourceBranchName'], 'development')
+
+    variables:
+    - group: python-agent-env-dev
 
     strategy:
       runOnce:
@@ -67,22 +67,55 @@ stages:
               curl -sSL https://get.livekit.io/cli | bash
               lk --help
             displayName: Install LiveKit CLI
-
-          - script: |
-              echo "===== livekit.toml used in CI ====="
-              cat livekit.toml
-              echo "=================================="
-            displayName: DEBUG livekit.toml
   
-
           - script: |
               cd $(Pipeline.Workspace)/agent
+
+              echo "LIVEKIT_API_KEY=$(LIVEKIT_API_KEY)" > .env
+              echo "LIVEKIT_API_SECRET=$(LIVEKIT_API_SECRET)" >> .env
+              echo "LIVEKIT_URL=$(LIVEKIT_URL)" >> .env
+
               set -a
               source .env
               set +a
-
-              echo "Using LiveKit URL: $LIVEKIT_URL"
   
               lk a deploy
-            displayName: Deploy Agent
+            displayName: Deploy Dev Agent
 
+# -------------DEMO------------------
+
+  - deployment: DeployDemo
+    displayName: Deploy Demo
+    environment: demo
+    condition: eq(variables['Build.SourceBranchName'], 'demo')
+  
+    variables:
+    - group: python-agent-env-demo
+  
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadPipelineArtifact@2
+            inputs:
+              artifact: livekit-agent
+              path: $(Pipeline.Workspace)/agent
+  
+          - script: |
+              curl -sSL https://get.livekit.io/cli | bash
+              lk --help
+            displayName: Install LiveKit CLI
+  
+          - script: |
+              cd $(Pipeline.Workspace)/agent
+  
+              echo "LIVEKIT_API_KEY=$(LIVEKIT_API_KEY)" > .env
+              echo "LIVEKIT_API_SECRET=$(LIVEKIT_API_SECRET)" >> .env
+              echo "LIVEKIT_URL=$(LIVEKIT_URL)" >> .env
+  
+              set -a
+              source .env
+              set +a
+  
+              lk a deploy
+            displayName: Deploy Demo Agent
