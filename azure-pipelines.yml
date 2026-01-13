@@ -1,8 +1,8 @@
-trigger: none
-#   branches:
-#    include:
-#      - demo
-#      - development
+trigger:
+  branches:
+   include:
+     - demo
+     - development
 
 pool:
   vmImage: ubuntu-latest
